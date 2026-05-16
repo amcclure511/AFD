@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Commercial Auto Finance Intelligence Dashboard — v1.1</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    /* ---------- design tokens ---------- */
+    :root {
+      --ink: #1f2937;
+      --ink-soft: #4b5563;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --line-strong: #d1d5db;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --accent: #0f4c81;
+      --accent-soft: #e6eff7;
+      --accent-ink: #08365e;
+      --warn: #b45309;
+      --warn-soft: #fff7e6;
+      --good: #047857;
+      --bad: #b91c1c;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 10px 30px rgba(15, 23, 42, 0.12);
+      --radius: 10px;
+      --gap: 12px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    a { color: var(--accent); }
+
+    /* ---------- top bar ---------- */
+    header.topbar {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 320px;
+    }
+    .brand .logo-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      transform: translateY(-1px);
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-ink);
+      letter-spacing: -0.01em;
+    }
+    .brand .sub {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toggle-group .label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 2px;
+    }
+    .pill {
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      font-weight: 500;
+    }
+    .pill:hover { border-color: var(--accent); color: var(--accent); }
+    .pill.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .pill[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+    .topbar .spacer { flex: 1; }
+    .topbar .timestamp {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.3;
+    }
+    .topbar .timestamp strong { color: var(--ink); }
+
+    /* ---------- main layout: dual mode ---------- */
+    main.layout {
+      padding: var(--gap);
+      gap: var(--gap);
+    }
+
+    /* CARDS VIEW (default) */
+    body.view-cards main.layout {
+      display: flex;
+      flex-direction: column;
+    }
+    body.view-cards .map-wrap { display: none; }
+    body.view-cards .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--gap);
+    }
+    @media (max-width: 900px) {
+      body.view-cards .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    body.view-cards .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: var(--gap);
+    }
+    /* span helpers */
+    body.view-cards .card.span-6 { grid-column: span 6; }
+    body.view-cards .card.span-4 { grid-column: span 4; }
+    body.view-cards .card.span-8 { grid-column: span 8; }
+    body.view-cards .card.span-12 { grid-column: span 12; }
+    @media (max-width: 1100px) {
+      body.view-cards .card.span-6,
+      body.view-cards .card.span-4,
+      body.view-cards .card.span-8 {
+        grid-column: span 12;
+      }
+    }
+
+    /* MAP VIEW */
+    body.view-map main.layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      height: calc(100vh - 90px);
+      min-height: 700px;
+    }
+    @media (max-width: 1100px) {
+      body.view-map main.layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+    }
+    body.view-map .map-wrap { display: block; }
+    body.view-map .cards-area {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+      overflow: auto;
+      min-height: 0;
+    }
+    body.view-map .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap);
+    }
+    body.view-map .cards-grid {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }
+    body.view-map .card { grid-column: auto !important; }
+
+    /* ---------- map area ---------- */
+    .map-wrap {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      min-height: 480px;
+    }
+    #map { width: 100%; height: 100%; }
+    body.view-map #map { height: 100%; }
+    @media (max-width: 1100px) {
+      body.view-map #map { height: 520px; }
+    }
+
+    .layers {
+      position: absolute;
+      top: 12px; left: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px 10px;
+      box-shadow: var(--shadow);
+      width: 230px;
+      z-index: 500;
+      font-size: 13px;
+    }
+    .layers h3 {
+      margin: 0 0 6px 0;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .layers label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      cursor: pointer;
+      color: var(--ink);
+      user-select: none;
+    }
+    .layers label .dot {
+      width: 9px; height: 9px;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+    .layers label.muted { color: var(--muted); font-style: italic; }
+    .layers input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 14px; height: 14px;
+    }
+    .layers .footnote {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+      border-top: 1px solid var(--line);
+      padding-top: 6px;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 12px; left: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px;
+      box-shadow: var(--shadow);
+      font-size: 11px;
+      color: var(--ink-soft);
+      z-index: 500;
+      max-width: 260px;
+    }
+    .legend strong { color: var(--ink); }
+    .legend-row {
+      display: flex; align-items: center; gap: 6px; padding: 2px 0;
+    }
+    .legend-swatch {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ---------- KPI tiles ---------- */
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+    .kpi .lbl {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .kpi .val {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-top: 4px;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi .delta {
+      font-size: 11px;
+      margin-top: 2px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .kpi .delta.up { color: var(--good); }
+    .kpi .delta.down { color: var(--bad); }
+    .kpi .src {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 8px;
+      border-top: 1px solid var(--line);
+      padding-top: 5px;
+    }
+    body.view-map .kpi .val { font-size: 22px; }
+    body.view-map .kpi { padding: 12px 14px; }
+
+    /* ---------- card base ---------- */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      color: var(--accent-ink);
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .card h2 .badge {
+      font-weight: 500;
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .card .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+    }
+    .card .row:last-child { border-bottom: 0; }
+    .card .row .name { font-weight: 600; }
+    .card .row .meta { color: var(--muted); font-size: 11px; }
+    .card .src {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px solid var(--line);
+    }
+    .card .card-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-style: italic;
+    }
+
+    /* ---------- TCO scorecard ---------- */
+    .tco-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: background 0.08s ease;
+    }
+    .tco-row:hover { background: var(--accent-soft); }
+    .tco-row:last-child { border-bottom: 0; }
+    .tco-row .name { font-weight: 600; color: var(--accent-ink); text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.1s; }
+    .tco-row:hover .name { text-decoration-color: var(--accent-ink); }
+    .tco-row .desc { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+    .tco-row .score {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      align-self: start;
+      white-space: nowrap;
+    }
+    .score-h { background: #d1fae5; color: #065f46; }
+    .score-m { background: #fef3c7; color: #92400e; }
+    .score-l { background: #fee2e2; color: #991b1b; }
+    .tco-row.dim { opacity: 0.45; }
+
+    /* ---------- Fleet Coverage Matrix ---------- */
+    .matrix {
+      display: grid;
+      grid-template-columns: minmax(120px, 1.5fr) repeat(5, 1fr);
+      gap: 6px 6px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .matrix .head {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 600;
+      text-align: center;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--line);
+    }
+    .matrix .head.firstcol { text-align: left; }
+    .matrix .prov {
+      font-weight: 600;
+      color: var(--accent-ink);
+      padding: 5px 0;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      transition: text-decoration-color 0.1s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .matrix .prov:hover { text-decoration-color: var(--accent-ink); }
+    .matrix .cell {
+      display: flex; align-items: center; justify-content: center;
+      padding: 5px 0;
+    }
+    .matrix-dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    /* 0 = none, 1 = limited, 2 = secondary, 3 = primary */
+    .matrix-dot.l0 { background: transparent; border: 1px dashed var(--line-strong); width: 8px; height: 8px; }
+    .matrix-dot.l1 { background: #fff; border: 1.5px solid var(--accent); width: 8px; height: 8px; }
+    .matrix-dot.l2 { background: var(--accent); opacity: 0.5; }
+    .matrix-dot.l3 { background: var(--accent); }
+    .matrix-legend {
+      display: flex; gap: 14px; justify-content: flex-end;
+      font-size: 10px; color: var(--muted);
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .matrix-legend .lg-row { display: flex; align-items: center; gap: 5px; }
+
+    /* ---------- mini bar (captive share) ---------- */
+    .bar {
+      display: grid;
+      grid-template-columns: 110px 1fr 48px;
+      gap: 10px;
+      align-items: center;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .bar .name { color: var(--ink); }
+    .bar .track { background: var(--line); height: 8px; border-radius: 999px; overflow: hidden; }
+    .bar .fill { height: 100%; background: var(--accent); border-radius: 999px; }
+    .bar .val { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+
+    /* ---------- sparkline ---------- */
+    .spark {
+      width: 100%;
+      height: 44px;
+      display: block;
+      margin: 6px 0 4px;
+    }
+
+    /* ---------- footer ---------- */
+    footer {
+      padding: 12px 18px 22px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    /* ---------- prototype banner ---------- */
+    .banner {
+      background: var(--warn-soft);
+      border-bottom: 1px solid #facc15;
+      color: var(--warn);
+      padding: 6px 18px;
+      font-size: 12px;
+      text-align: center;
+    }
+    .banner strong { color: #78350f; }
+
+    /* ---------- leaflet popup tweaks ---------- */
+    .leaflet-popup-content {
+      font-family: inherit;
+      margin: 10px 12px;
+      font-size: 12.5px;
+      line-height: 1.45;
+    }
+    .leaflet-popup-content strong { color: var(--accent-ink); }
+    .leaflet-popup-content .row {
+      display: flex; justify-content: space-between; gap: 12px;
+      border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px;
+      font-size: 11.5px; color: var(--ink-soft);
+    }
+    .leaflet-popup-content .pill-mini {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      margin-top: 4px;
+    }
+    .leaflet-popup-content .leader-link {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-top: 6px;
+      cursor: pointer;
+      border: 0;
+      font-weight: 500;
+    }
+    .leaflet-popup-content .leader-link:hover { background: var(--accent-ink); }
+
+    /* ---------- FMC profile drawer ---------- */
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.32);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      z-index: 900;
+    }
+    .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+    .drawer {
+      position: fixed;
+      top: 0; right: 0;
+      height: 100vh;
+      width: 460px;
+      max-width: calc(100vw - 24px);
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      box-shadow: var(--shadow-lg);
+      transform: translateX(100%);
+      transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .drawer-header h3 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--accent-ink);
+      letter-spacing: -0.01em;
+    }
+    .drawer-header .region-badge {
+      display: inline-block;
+      font-size: 10px;
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+    }
+    .drawer-header .parent {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .drawer-close {
+      border: 0;
+      background: transparent;
+      font-size: 22px;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 0 4px;
+      line-height: 1;
+    }
+    .drawer-close:hover { color: var(--ink); }
+    .drawer-body {
+      padding: 14px 18px 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .drawer-section {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 0;
+    }
+    .drawer-section:last-child { border-bottom: 0; }
+    .drawer-section h4 {
+      margin: 0 0 6px 0;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .drawer-section p {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .quickstats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 14px;
+    }
+    .quickstat {
+      font-size: 12px;
+    }
+    .quickstat .qlbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .quickstat .qval { color: var(--ink); font-weight: 600; }
+    .verticals {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .vert-pill {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .size-mix {
+      display: grid;
+      grid-template-columns: 60px 1fr 24px;
+      gap: 6px;
+      align-items: center;
+      font-size: 11.5px;
+    }
+    .size-mix .name { color: var(--ink); }
+    .size-mix .track { background: var(--line); height: 8px; border-radius: 999px; overflow: hidden; }
+    .size-mix .fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.25s ease; }
+    .size-mix .val { font-size: 10px; color: var(--muted); text-align: right; }
+    .src-link {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .src-link a { color: var(--accent); text-decoration: none; }
+    .src-link a:hover { text-decoration: underline; }
+
+    /* ---------- responsive tweaks ---------- */
+    @media (max-width: 700px) {
+      .matrix { grid-template-columns: minmax(90px, 1.5fr) repeat(5, 1fr); font-size: 11px; }
+      .brand { min-width: 220px; }
+      .brand h1 { font-size: 14px; }
+    }
+  </style>
+</head>
+<body class="view-cards">
+  <div class="banner">
+    <strong>Illustrative prototype.</strong> All numbers are placeholder values informed by recent public releases.
+    Refresh from the v1 sources monthly (ACEA, FRED, ELFA, Cox press) to make this defensible in a meeting.
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>Commercial Auto Finance Intelligence</h1>
+      <span class="sub">v1.1 prototype</span>
+    </div>
+
+    <div class="toggle-group" data-group="geo">
+      <span class="label">Geography</span>
+      <button class="pill active" data-val="us">U.S.</button>
+      <button class="pill" data-val="eu">Europe</button>
+    </div>
+
+    <div class="toggle-group" data-group="seg">
+      <span class="label">Segment</span>
+      <button class="pill" data-val="consumer">Consumer</button>
+      <button class="pill active" data-val="commercial">Commercial</button>
+    </div>
+
+    <div class="toggle-group" data-group="size">
+      <span class="label">Fleet size</span>
+      <button class="pill active" data-val="all">All</button>
+      <button class="pill" data-val="micro">Micro 1-5</button>
+      <button class="pill" data-val="small">Small 6-50</button>
+      <button class="pill" data-val="medium">Med 51-200</button>
+      <button class="pill" data-val="large">Lg 201-600</button>
+      <button class="pill" data-val="xl">XL 601+</button>
+    </div>
+
+    <div class="toggle-group" data-group="view">
+      <span class="label">View</span>
+      <button class="pill active" data-val="cards">Cards</button>
+      <button class="pill" data-val="map">Map</button>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="timestamp">
+      <div><strong>Q2 2026</strong> placeholder snapshot</div>
+      <div>v1.1 — 100% free + no-account sources</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- KPI strip - rendered into both views via CSS -->
+    <section class="kpi-grid" id="kpiGrid"></section>
+
+    <!-- Map area (hidden in cards view) -->
+    <section class="map-wrap">
+      <div id="map"></div>
+
+      <div class="layers" id="layerPanel">
+        <h3>Layers</h3>
+        <label><input type="checkbox" data-layer="registrations" checked /><span class="dot" style="background:#0f4c81"></span> Vehicle registrations</label>
+        <label><input type="checkbox" data-layer="leaders" checked /><span class="dot" style="background:#b91c1c"></span> Fleet management leaders</label>
+        <label><input type="checkbox" data-layer="captiveShare" /><span class="dot" style="background:#7c3aed"></span> Captive vs bank share</label>
+        <label><input type="checkbox" data-layer="rates" /><span class="dot" style="background:#047857"></span> Interest-rate environment</label>
+        <label><input type="checkbox" data-layer="reg" /><span class="dot" style="background:#d97706"></span> Regulatory zones</label>
+        <label><input type="checkbox" data-layer="supply" /><span class="dot" style="background:#475569"></span> Tariff &amp; supply hot spots</label>
+        <label class="muted"><input type="checkbox" data-layer="ev" /><span class="dot" style="background:#0891b2"></span> EV mix (low priority)</label>
+        <div class="footnote">Click a fleet leader pin for a full profile.</div>
+      </div>
+
+      <div class="legend">
+        <strong>How to read this map</strong>
+        <div class="legend-row"><span class="legend-swatch" style="background:#0f4c81"></span> Circle size = registrations volume</div>
+        <div class="legend-row"><span class="legend-swatch" style="background:#b91c1c"></span> Red pins = fleet leader HQs (click)</div>
+      </div>
+    </section>
+
+    <!-- Cards grid (hidden in map view's right column? no, used in cards view; map view uses cards-area below) -->
+    <section class="cards-grid" id="cardsGrid">
+      <!-- TCO scorecard - large in cards view -->
+      <div class="card span-6" id="tcoCard">
+        <h2>Fleet management TCO transparency <span class="badge">Strategic</span></h2>
+        <div class="card-hint">Click any provider for their full business profile.</div>
+        <div id="tcoRows"></div>
+        <div class="src">Source: each provider's public marketing &amp; investor pages. Variance in methodology is itself the story.</div>
+      </div>
+
+      <!-- Fleet coverage matrix -->
+      <div class="card span-6" id="coverageCard">
+        <h2>Where each provider plays <span class="badge" id="coverageBadge">U.S. providers</span></h2>
+        <div class="card-hint">Synthesized from each provider's public positioning &amp; case studies. Click a name for the full profile.</div>
+        <div class="matrix" id="coverageMatrix"></div>
+        <div class="matrix-legend">
+          <span class="lg-row"><span class="matrix-dot l1"></span> Limited</span>
+          <span class="lg-row"><span class="matrix-dot l2"></span> Secondary</span>
+          <span class="lg-row"><span class="matrix-dot l3"></span> Primary</span>
+        </div>
+        <div class="src">Stated positioning from each FMC's public marketing &amp; analyst commentary.</div>
+      </div>
+
+      <!-- Captive vs bank share -->
+      <div class="card span-4" id="captiveCard">
+        <h2>Originations share by lender <span class="badge" id="captiveBadge">U.S. — Commercial</span></h2>
+        <div id="captiveBars"></div>
+        <div class="src">Illustrative. U.S. retail: Experian SOAFM. EU: Eurofinas annual.</div>
+      </div>
+
+      <!-- Used vehicle value index -->
+      <div class="card span-4" id="manheimCard">
+        <h2>Used vehicle value index <span class="badge">Manheim</span></h2>
+        <div id="manheimSpark"></div>
+        <div class="row">
+          <span class="name">Latest reading</span>
+          <span><strong id="manheimVal">203.4</strong> <span class="meta" id="manheimDelta">+0.7% YoY</span></span>
+        </div>
+        <div class="src">Cox Automotive press release (monthly, free, no account).</div>
+      </div>
+
+      <!-- Macro -->
+      <div class="card span-4" id="macroCard">
+        <h2>Macro context <span class="badge" id="macroBadge">FRED + ECB</span></h2>
+        <div class="row"><span class="name">Policy rate (target)</span><span id="macroRate"></span></div>
+        <div class="row"><span class="name">Auto loan APR (60mo, new)</span><span id="macroApr"></span></div>
+        <div class="row"><span class="name">60+ day auto delinquency</span><span id="macroDelinq"></span></div>
+        <div class="src">FRED &amp; NY Fed HHDC (U.S.); ECB SDW (EU). All free, no account.</div>
+      </div>
+
+      <!-- Regulatory watch -->
+      <div class="card span-6" id="regCard">
+        <h2>Regulatory watch <span class="badge" id="regBadge">U.S.</span></h2>
+        <div id="regRows"></div>
+        <div class="src">CFPB &amp; FTC press (U.S.); EUR-Lex + ESMA (EU). All free, no account.</div>
+      </div>
+
+      <!-- CEO call prep -->
+      <div class="card span-6" id="ceoCard">
+        <h2>CEO call prep — sharpest take right now <span class="badge">For you</span></h2>
+        <div id="ceoTakes"></div>
+        <div class="src">Built from the cards above. Update when the underlying numbers move materially.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Single-file v1.1 prototype · Personal use · No employer affiliation · All data illustrative pending refresh from public sources
+  </footer>
+
+  <!-- FMC profile drawer -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="fmcDrawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div>
+        <h3 id="drawerTitle">Provider</h3>
+        <div><span class="region-badge" id="drawerRegion">U.S.</span></div>
+        <div class="parent" id="drawerParent"></div>
+      </div>
+      <button class="drawer-close" id="drawerClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    const STATE = {
+      geography: 'us',
+      segment: 'commercial',
+      fleetSize: 'all',
+      view: 'cards',
+      layers: {
+        registrations: true,
+        leaders: true,
+        captiveShare: false,
+        rates: false,
+        reg: false,
+        supply: false,
+        ev: false,
+      }
+    };
+
+    // ============================================================
+    // DATA (illustrative values from public sources)
+    // ============================================================
+    const DATA = {
+      registrations: {
+        us: [
+          { name: 'United States',  lat: 39.5, lon: -98.0, totalNew: '15.4M', commercialLcv: '~3.0M', src: 'BEA + S&P Global Mobility' }
+        ],
+        eu: [
+          { name: 'Germany',     lat: 51.2, lon: 10.4, totalNew: '2.84M', commercialLcv: '305K', src: 'ACEA monthly' },
+          { name: 'France',      lat: 46.6, lon: 2.4,  totalNew: '1.71M', commercialLcv: '380K', src: 'ACEA monthly' },
+          { name: 'United Kingdom', lat: 54.0, lon: -2.5, totalNew: '1.95M', commercialLcv: '340K', src: 'ACEA monthly' },
+          { name: 'Italy',       lat: 41.9, lon: 12.5, totalNew: '1.55M', commercialLcv: '195K', src: 'ACEA monthly' },
+          { name: 'Spain',       lat: 40.0, lon: -4.0, totalNew: '0.96M', commercialLcv: '170K', src: 'ACEA monthly' },
+          { name: 'Netherlands', lat: 52.1, lon: 5.3,  totalNew: '0.42M', commercialLcv: '70K',  src: 'ACEA monthly' },
+        ]
+      },
+
+      // map pin coordinates for fleet leaders (drawn from FMC_PROFILES below)
+      // captive share for the captive-share card
+      captiveShare: {
+        us: {
+          consumer:  [['Captive', 27], ['Bank', 28], ['Credit Union', 21], ['Finance Co.', 16], ['BHPH', 8]],
+          commercial:[['Captive', 38], ['Bank', 31], ['Independent FM', 22], ['Other', 9]],
+        },
+        eu: {
+          consumer:  [['Captive', 36], ['Bank', 41], ['Independent', 19], ['Other', 4]],
+          commercial:[['Captive', 32], ['Bank-owned lessor', 44], ['Independent', 19], ['Other', 5]],
+        }
+      },
+
+      kpis: {
+        us: {
+          consumer:   { rate: '7.4%', rateD: '+30 bps YoY', orig: '+2.1% YoY', delinq: '2.7%', delinqD: '+10 bps YoY', mvpi: '203.4' },
+          commercial: { rate: '6.9%', rateD: '+15 bps YoY', orig: '+0.8% YoY', delinq: '0.45%', delinqD: '+8 bps YoY', mvpi: '203.4' },
+        },
+        eu: {
+          consumer:   { rate: '5.8%', rateD: '−20 bps YoY', orig: '−1.2% YoY', delinq: '1.4%', delinqD: 'flat', mvpi: 'n/a' },
+          commercial: { rate: '5.4%', rateD: '−25 bps YoY', orig: '+3.6% YoY', delinq: '0.32%', delinqD: '−2 bps YoY', mvpi: 'n/a' },
+        }
+      },
+
+      macro: {
+        us: { policy: '4.50%', policySrc: 'Fed upper bound (FRED)', apr: '7.4%', delinq: '2.7%', src: 'FRED + NY Fed HHDC (free)' },
+        eu: { policy: '2.25%', policySrc: 'ECB main refi (ECB SDW)', apr: '5.8%', delinq: '1.4%', src: 'ECB SDW + Eurofinas (free)' }
+      },
+
+      manheim: [217, 215, 213, 212, 210, 209, 208, 206, 205, 204, 204, 203, 202, 201, 201, 202, 202, 203, 203, 204, 204, 203, 203, 203.4],
+
+      regulatory: {
+        us: [
+          { title: 'CFPB auto-finance posture', meta: 'Enforcement temperature shifts with administration; watch comment letters.' },
+          { title: 'CARS Rule status', meta: 'FTC dealer add-on rule remains under court review.' },
+          { title: 'State usury caps', meta: 'CO, IL, NM continue to cap auto APRs; watch for spread to TX, AZ.' },
+        ],
+        eu: [
+          { title: 'CCD2 transposition (ongoing through 2026)', meta: 'Each member state implementing; pre-contractual disclosure changes.' },
+          { title: 'CSRD Scope 3 cascade', meta: 'Large fleet operators reporting drives data demand on FMCs.' },
+          { title: 'EU AI Act', meta: 'High-risk credit scoring obligations starting to apply.' },
+        ]
+      },
+
+      supply: [
+        { name: 'BlueOval City (Ford F-Series + battery)', lat: 35.46, lon: -89.04, region: 'us' },
+        { name: 'GM Ultium Cells (Lordstown OH)',         lat: 41.50, lon: -80.85, region: 'us' },
+        { name: 'Stellantis Brampton',                    lat: 43.71, lon: -79.78, region: 'us' },
+        { name: 'TSMC Arizona (chip)',                    lat: 33.71, lon: -112.10, region: 'us' },
+        { name: 'CATL / Stellantis Spain',                lat: 39.70, lon: -3.99, region: 'eu' },
+        { name: 'Northvolt Skellefteå',                   lat: 64.75, lon: 20.96, region: 'eu' },
+        { name: 'Volkswagen Wolfsburg',                   lat: 52.43, lon: 10.79, region: 'eu' },
+      ],
+
+      ev: {
+        us: [
+          { name: 'United States', lat: 39.5, lon: -98.0, bevShare: '8.4%', src: 'Cox Automotive Insights' }
+        ],
+        eu: [
+          { name: 'Norway',  lat: 60.5, lon: 8.5,  bevShare: '88%', src: 'ACEA / OFV' },
+          { name: 'Germany', lat: 51.2, lon: 10.4, bevShare: '17%', src: 'ACEA' },
+          { name: 'France',  lat: 46.6, lon: 2.4,  bevShare: '19%', src: 'ACEA' },
+          { name: 'UK',      lat: 54.0, lon: -2.5, bevShare: '20%', src: 'SMMT' },
+          { name: 'Spain',   lat: 40.0, lon: -4.0, bevShare: '7%',  src: 'ACEA' },
+        ]
+      },
+
+      regZones: {
+        us: [
+          { name: 'CFPB jurisdiction', bounds: [[24.5, -125.0], [49.4, -66.9]], color: '#d97706', desc: 'Federal consumer financial protection.' }
+        ],
+        eu: [
+          { name: 'EU CCD2 / CSRD scope', bounds: [[36.0, -10.0], [60.5, 30.0]], color: '#d97706', desc: 'Consumer Credit Directive II + CSRD scope-3 cascade.' }
+        ]
+      },
+
+      // CEO call prep takes — keyed by geo+segment
+      ceoTakes: {
+        'us-commercial': [
+          { hd: 'Captives still 38% of U.S. commercial originations; bank-owned share keeps climbing.',
+            ln: '"Worth a portfolio defense conversation before we lose another 200 bps."' },
+          { hd: 'Manheim used index roughly flat YoY; commercial residual exposure normalizing.',
+            ln: '"Reset cadence determines whether we recognize Q1 pain through Q3 or get a clean break."' },
+          { hd: 'Element &amp; Arval publish defensible TCO methodologies. Holman is intermittent.',
+            ln: '"If we can\'t explain our TCO line-by-line, that\'s a sales objection we lose 100% of the time."' },
+        ],
+        'us-consumer': [
+          { hd: 'Consumer APR at 7.4% against 4.5% Fed; subvention is the lever.',
+            ln: '"If rates don\'t come down, our model relies on volume that share data doesn\'t support."' },
+          { hd: '60+ day auto delinquency at 2.7%, drifting up ~10 bps YoY.',
+            ln: '"Watch the prime-tier cohort; the next 25 bps move flips originations math."' },
+          { hd: 'CARS Rule still under court review; state usury caps spreading.',
+            ln: '"Worth a 1-page risk read if Texas or Arizona join the rate-cap club."' },
+        ],
+        'eu-commercial': [
+          { hd: 'EU commercial originations +3.6% YoY; outpacing the U.S.',
+            ln: '"Where in our captive plan is the EU commercial channel given that headroom?"' },
+          { hd: 'Ayvens is the world\'s largest FMC post-merger; sets the EU pricing reference.',
+            ln: '"Our reference price moved when ALD-LeasePlan closed; do we know by how much?"' },
+          { hd: 'CSRD Scope 3 cascade pulls FMCs into the data plumbing role.',
+            ln: '"There\'s a product play here: TCO + Scope 3 disclosure as a bundled service."' },
+        ],
+        'eu-consumer': [
+          { hd: 'ECB at 2.25%; consumer APRs at 5.8%; spread is half the U.S.\'s.',
+            ln: '"EU captive economics differ — subvention is a smaller lever."' },
+          { hd: 'CCD2 transposition reshapes pre-contractual disclosure through 2026.',
+            ln: '"Do we have an EU consumer compliance plan, or are we waiting for the first regulator letter?"' },
+          { hd: 'EV mix at 17-20% in major markets; cooling but durable.',
+            ln: '"Residual setting is a 36-month forward bet — what\'s our EU EV residual model assumption?"' },
+        ],
+      }
+    };
+
+    // ============================================================
+    // FMC PROFILES (the static reference content for the drawer)
+    // ============================================================
+    const FMC_PROFILES = {
+      element: {
+        name: 'Element Fleet Management', region: 'us',
+        lat: 43.59, lon: -79.65,
+        parent: 'Public — TSX:EFN', hq: 'Mississauga, ON, Canada',
+        vum: '~1.5M+ vehicles', countries: 'U.S., Canada, Mexico, AU, NZ',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 3 },
+        verticals: ['Service trades', 'Pharma reps', 'Government', 'Utilities', 'Equipment rental', 'Last-mile delivery'],
+        ev: '~12% of new units; client electrification programs active.',
+        diff: 'Largest pure-play in North America. Public-company transparency makes the financial picture readable in their 10-Q. Strategic Services consulting arm is a differentiator vs. peers.',
+        oem: 'Strong commercial ties with GM (preferred provider relationships).',
+        tco: 'High. Public methodology whitepapers, EV TCO calculator on website, and an MD&A in 10-Q that addresses fleet productivity.',
+        recent: '2023-2024: Mexico expansion. Continued banking/mobility services exploration. Strong commercial book performance.',
+        customers: 'Fortune-500 disclosed by vertical, rarely by name. Public-sector wins in U.S. + Canada announced periodically.',
+        sourceUrl: 'investors.elementfleet.com',
+        tcoScore: 'h',
+      },
+      holman: {
+        name: 'Holman', region: 'us',
+        lat: 39.94, lon: -74.89,
+        parent: 'Private (Holman Enterprises)', hq: 'Mt. Laurel, NJ',
+        vum: '~600K vehicles (fleet mgmt book, est.)', countries: 'U.S., Canada, U.K., Mexico, Germany',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 3 },
+        verticals: ['Government', 'Utilities', 'Service trades', 'Telecom', 'Pharmaceutical'],
+        ev: 'Active in fleet electrification consulting; book mix less disclosed.',
+        diff: 'Vertically integrated — fleet management (formerly ARI), retail dealerships, parts distribution (Holman Parts), and upfit operations under one roof.',
+        oem: 'Long-running Stellantis / FCA fleet partnership in U.S. commercial.',
+        tco: 'Medium. State of Fleet report appears intermittently; TCO benchmarking is embedded in their Strategic Consulting offering rather than published broadly.',
+        recent: 'ARI rebrand integration through 2024. International expansion in U.K. and Germany continues.',
+        customers: 'Few publicly named. Government and utility customers periodically disclosed in case studies.',
+        sourceUrl: 'holman.com',
+        tcoScore: 'm',
+      },
+      wheels: {
+        name: 'Wheels (Wheels Donlen)', region: 'us',
+        lat: 42.03, lon: -87.88,
+        parent: 'Athene Holding (Apollo affiliate)', hq: 'Des Plaines, IL',
+        vum: '~700K vehicles (post-merger estimate)', countries: 'U.S., Canada',
+        sizeMix: { micro: 0, small: 0, medium: 1, large: 3, xl: 3 },
+        verticals: ['Last-mile delivery (notably Amazon DSP)', 'Pharma', 'Field services', 'Utilities'],
+        ev: 'EV-forward marketing. Published electrification ROI cases for multiple clients.',
+        diff: 'Wheels + Donlen merger closed 2022 created a dual-brand offering largely focused on enterprise commercial.',
+        oem: 'Multi-brand procurement; not OEM-locked.',
+        tco: 'Medium. TCO methodology whitepapers exist; electrification ROI cases are their most distinctive content.',
+        recent: '2022 merger close. Integration substantially completed by 2024. Periodic PR around EV pilots.',
+        customers: 'Amazon (DSP fleet relationship disclosed in earlier announcements).',
+        sourceUrl: 'wheels.com',
+        tcoScore: 'm',
+      },
+      enterprise: {
+        name: 'Enterprise Fleet Management', region: 'us',
+        lat: 38.63, lon: -90.20,
+        parent: 'Enterprise Mobility (private)', hq: 'St. Louis, MO',
+        vum: '~600K vehicles', countries: 'U.S., Canada',
+        sizeMix: { micro: 1, small: 3, medium: 3, large: 1, xl: 0 },
+        verticals: ['SMB services', 'Construction', 'Field service', 'Distribution', 'Local government'],
+        ev: 'Modest. SMB customer base electrifying slowly.',
+        diff: 'Small-and-mid fleet specialist (the segment most pure-plays underweight). Branch network inherited from rental sister business gives unique local-coverage advantage.',
+        oem: 'Multi-brand; leverages Enterprise Mobility purchasing scale.',
+        tco: 'Limited. Mostly sales collateral, not published methodology.',
+        recent: 'Steady SMB share gains. Quiet PR cadence relative to larger competitors.',
+        customers: 'Wide SMB book. Few publicly named.',
+        sourceUrl: 'efleets.com',
+        tcoScore: 'l',
+      },
+      merchants: {
+        name: 'Merchants Fleet', region: 'us',
+        lat: 43.07, lon: -71.44,
+        parent: 'Bain Capital (majority)', hq: 'Hooksett, NH',
+        vum: '~150K vehicles', countries: 'U.S.',
+        sizeMix: { micro: 2, small: 3, medium: 3, large: 2, xl: 1 },
+        verticals: ['SMB', 'E-commerce delivery', 'Service trades', 'Mid-market commercial'],
+        ev: 'Aggressive. Published EV adoption goals and case studies. Active partner in OEM EV pilots.',
+        diff: 'Aggressive growth, EV-forward branding, frequent press coverage. Targets the SMB-to-mid space where Enterprise Fleet also competes.',
+        oem: 'Multi-brand.',
+        tco: 'Medium-low. EV case studies are strong; broad TCO methodology is less developed than Element or Wheels.',
+        recent: 'Multiple EV pilot announcements 2023-2025. Continued growth in the e-commerce delivery vertical.',
+        customers: 'Mid-market and SMB book. A handful of named e-commerce relationships.',
+        sourceUrl: 'merchantsfleet.com',
+        tcoScore: 'm',
+      },
+      'mike-albert': {
+        name: 'Mike Albert Fleet Solutions', region: 'us',
+        lat: 39.10, lon: -84.51,
+        parent: 'Private', hq: 'Cincinnati, OH',
+        vum: '~70K vehicles', countries: 'U.S.',
+        sizeMix: { micro: 1, small: 3, medium: 3, large: 1, xl: 0 },
+        verticals: ['Regional services', 'SMB', 'Local commercial'],
+        ev: 'Modest, follows customer demand.',
+        diff: 'Regional specialist. Useful as a pricing comp for SMB and mid-fleet deals.',
+        oem: 'Multi-brand.',
+        tco: 'Limited public methodology.',
+        recent: 'Quiet PR cadence; steady regional book.',
+        customers: 'Regional SMB. Few publicly named.',
+        sourceUrl: 'mikealbert.com',
+        tcoScore: 'l',
+      },
+      ayvens: {
+        name: 'Ayvens', region: 'eu',
+        lat: 48.85, lon: 2.35,
+        parent: 'Société Générale', hq: 'Paris, France (multiple HQs post-merger)',
+        vum: '~3.3M vehicles', countries: '40+ countries',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 3 },
+        verticals: ['Multinational corporate', 'Public sector', 'Last-mile delivery (EU)', 'Mobility / car subscription'],
+        ev: '~30%+ of new orders BEV in mature markets. Published electrification targets by country.',
+        diff: 'Largest fleet manager in the world post ALD-LeasePlan merger. Multinational footprint is unmatched; sets the EU pricing reference.',
+        oem: 'Multi-brand. SG bank distribution channel.',
+        tco: 'High. EV TCO crossover analyses by country, investor day decks, and country-level transition plans.',
+        recent: 'ALD-LeasePlan merger close 2024; integration through 2026. First full-year combined disclosures are arriving now.',
+        customers: 'Many EU-headquartered F500. Public sector wins disclosed by country.',
+        sourceUrl: 'ayvens.com',
+        tcoScore: 'h',
+      },
+      arval: {
+        name: 'Arval', region: 'eu',
+        lat: 48.88, lon: 2.18,
+        parent: 'BNP Paribas', hq: 'Rueil-Malmaison, France',
+        vum: '~1.7M vehicles', countries: '30 countries',
+        sizeMix: { micro: 0, small: 1, medium: 3, large: 3, xl: 3 },
+        verticals: ['Mid-large corporate', 'Public sector', 'Mobility services'],
+        ev: 'High. Mobility Observatory tracks EV transition by country in detail.',
+        diff: 'Mobility Observatory annual report is the cleanest TCO disclosure in the industry. Sets the methodological reference.',
+        oem: 'Multi-brand. BNP Paribas bank distribution channel.',
+        tco: 'High. Mobility Observatory annual report, country-level data, segment-level TCO.',
+        recent: 'Beyond Mobility expansion (subscription, micro-mobility partnerships). Steady share growth.',
+        customers: 'F500 EU + U.K. corporate book.',
+        sourceUrl: 'arval.com (Mobility Observatory)',
+        tcoScore: 'h',
+      },
+      alphabet: {
+        name: 'Alphabet (BMW Group)', region: 'eu',
+        lat: 48.14, lon: 11.58,
+        parent: 'BMW Group', hq: 'Munich, Germany',
+        vum: '~700K vehicles', countries: '20 countries',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 3 },
+        verticals: ['Premium corporate', 'White-collar fleets'],
+        ev: 'Substantial. BMW i family + MINI EV bias in the order book.',
+        diff: 'OEM-owned, premium-skewed. The European mirror of an OEM-captive fleet model.',
+        oem: 'BMW Group native; multi-brand procurement available.',
+        tco: 'Medium. TCO calculators and case studies; less third-party benchmarking than Arval or Element.',
+        recent: 'EV product expansion alongside BMW i lineup. Service bundling with BMW Group connected-car platform.',
+        customers: 'Premium corporate book.',
+        sourceUrl: 'alphabet.com',
+        tcoScore: 'm',
+      },
+      athlon: {
+        name: 'Athlon', region: 'eu',
+        lat: 52.37, lon: 5.21,
+        parent: 'Pon Holdings', hq: 'Almere, Netherlands',
+        vum: '~400K vehicles', countries: '13 countries (Benelux + DACH-led)',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 2 },
+        verticals: ['Mid-large corporate', 'Mobility'],
+        ev: 'Strong in Benelux markets.',
+        diff: 'Multi-brand, heavy in Benelux and Germany. Used as a Benelux price reference point.',
+        oem: 'Multi-brand via Pon.',
+        tco: 'Limited public methodology.',
+        recent: 'Quiet relative to ALD-LeasePlan merger noise; steady Benelux book.',
+        customers: 'Benelux corporate.',
+        sourceUrl: 'athlon.com',
+        tcoScore: 'l',
+      },
+      vwfs: {
+        name: 'Volkswagen Financial Services', region: 'eu',
+        lat: 52.27, lon: 10.52,
+        parent: 'Volkswagen Group', hq: 'Braunschweig, Germany',
+        vum: '~1.5M (fleet share of total book)', countries: '40+ countries',
+        sizeMix: { micro: 0, small: 1, medium: 2, large: 3, xl: 3 },
+        verticals: ['Corporate fleets aligned with VW Group brands', 'Public sector'],
+        ev: 'Strong. VW Group ID family + Audi e-tron heavily represented in the fleet book.',
+        diff: 'OEM captive; the European mirror of Ford Credit / GM Financial commercial books at scale.',
+        oem: 'VW Group native (VW, Audi, ŠKODA, SEAT, Cupra, Porsche, MAN).',
+        tco: 'OEM-bundled. TCO is embedded in product offers rather than disclosed as standalone methodology.',
+        recent: 'Battery cell strategy alignment with VW Group PowerCo. Continued integration with VW Group mobility services.',
+        customers: 'F500 EU + global VW fleet customers.',
+        sourceUrl: 'vwfs.com',
+        tcoScore: 'm',
+      },
+    };
+
+    // helpers
+    const FMC_LIST = () => Object.entries(FMC_PROFILES);
+    const FMC_FOR_REGION = (r) => FMC_LIST().filter(([,p]) => p.region === r);
+
+    // ============================================================
+    // MAP INIT
+    // ============================================================
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: true,
+      worldCopyJump: true,
+    }).setView([42, -30], 3);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      minZoom: 2,
+      attribution: '&copy; OpenStreetMap contributors',
+      opacity: 0.85,
+    }).addTo(map);
+
+    const layerGroups = {
+      registrations: L.layerGroup(),
+      leaders: L.layerGroup(),
+      captiveShare: L.layerGroup(),
+      rates: L.layerGroup(),
+      reg: L.layerGroup(),
+      supply: L.layerGroup(),
+      ev: L.layerGroup(),
+    };
+
+    // ============================================================
+    // LAYER BUILDERS
+    // ============================================================
+    function clearLayer(name) { layerGroups[name].clearLayers(); }
+
+    function buildRegistrations() {
+      clearLayer('registrations');
+      const data = DATA.registrations[STATE.geography];
+      data.forEach(d => {
+        const seg = STATE.segment;
+        const label = seg === 'commercial' ? d.commercialLcv : d.totalNew;
+        const sizeMap = { '15.4M': 26, '2.84M': 22, '1.95M': 19, '1.71M': 18, '1.55M': 17, '0.96M': 14, '0.42M': 11 };
+        const seg2 = { '~3.0M': 26, '380K': 18, '340K': 17, '305K': 16, '195K': 13, '170K': 12, '70K': 9 };
+        const radius = (seg === 'commercial' ? seg2[label] : sizeMap[label]) || 12;
+        const c = L.circleMarker([d.lat, d.lon], {
+          radius,
+          color: '#0f4c81',
+          weight: 1.5,
+          fillColor: '#0f4c81',
+          fillOpacity: 0.18,
+        }).bindPopup(
+          `<strong>${d.name}</strong><br>` +
+          `New ${seg === 'commercial' ? 'commercial / LCV' : 'vehicle'} regs: <strong>${label}</strong><br>` +
+          `<div class="row"><span>Source</span><span>${d.src}</span></div>` +
+          `<span class="pill-mini">illustrative</span>`
+        );
+        c.addTo(layerGroups.registrations);
+      });
+    }
+
+    function buildLeaders() {
+      clearLayer('leaders');
+      FMC_FOR_REGION(STATE.geography).forEach(([key, p]) => {
+        const m = L.marker([p.lat, p.lon], {
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="
+              background:#b91c1c;
+              width:14px;height:14px;border-radius:50%;
+              border:2px solid white;
+              box-shadow:0 1px 4px rgba(0,0,0,.4);
+            "></div>`,
+            iconSize: [14,14], iconAnchor: [7,7],
+          })
+        });
+        const popupHtml =
+          `<strong>${p.name}</strong><br>` +
+          `${p.parent}<br>` +
+          `<div class="row"><span>Vehicles UM</span><span>${p.vum}</span></div>` +
+          `<div class="row"><span>TCO transparency</span><span>${p.tcoScore === 'h' ? 'High' : p.tcoScore === 'm' ? 'Medium' : 'Limited'}</span></div>` +
+          `<button class="leader-link" data-fmc="${key}">Open full profile →</button>`;
+        m.bindPopup(popupHtml);
+        m.on('popupopen', (e) => {
+          const btn = e.popup.getElement().querySelector('.leader-link');
+          if (btn) btn.addEventListener('click', () => openDrawer(btn.dataset.fmc));
+        });
+        m.addTo(layerGroups.leaders);
+      });
+    }
+
+    function buildSupply() {
+      clearLayer('supply');
+      DATA.supply
+        .filter(d => d.region === STATE.geography)
+        .forEach(d => {
+          L.circleMarker([d.lat, d.lon], {
+            radius: 7, color: '#475569', weight: 2,
+            fillColor: '#fff', fillOpacity: 1,
+          })
+          .bindPopup(`<strong>${d.name}</strong><br><span class="pill-mini">tariff &amp; supply hot spot</span>`)
+          .addTo(layerGroups.supply);
+        });
+    }
+
+    function buildEv() {
+      clearLayer('ev');
+      DATA.ev[STATE.geography].forEach(d => {
+        L.circleMarker([d.lat, d.lon], {
+          radius: 14, color: '#0891b2', weight: 2,
+          fillColor: '#0891b2', fillOpacity: 0.22,
+        })
+        .bindPopup(
+          `<strong>${d.name}</strong><br>BEV share of new regs: <strong>${d.bevShare}</strong><br>` +
+          `<div class="row"><span>Source</span><span>${d.src}</span></div>`
+        )
+        .addTo(layerGroups.ev);
+      });
+    }
+
+    function buildReg() {
+      clearLayer('reg');
+      DATA.regZones[STATE.geography].forEach(z => {
+        L.rectangle(z.bounds, {
+          color: z.color, weight: 1.5,
+          fillColor: z.color, fillOpacity: 0.07,
+          dashArray: '4 6',
+        }).bindPopup(`<strong>${z.name}</strong><br>${z.desc}`)
+        .addTo(layerGroups.reg);
+      });
+    }
+
+    function buildRates() {
+      clearLayer('rates');
+      const m = DATA.macro[STATE.geography];
+      const center = STATE.geography === 'us' ? [39.5, -98.0] : [50.5, 10.0];
+      L.circleMarker(center, {
+        radius: 22, color: '#047857', weight: 2,
+        fillColor: '#047857', fillOpacity: 0.10
+      })
+      .bindPopup(
+        `<strong>Rate environment — ${STATE.geography === 'us' ? 'United States' : 'Eurozone'}</strong><br>` +
+        `Policy rate: <strong>${m.policy}</strong> (${m.policySrc})<br>` +
+        `Auto loan APR (60mo): <strong>${m.apr}</strong><br>` +
+        `60+ day delinquency: <strong>${m.delinq}</strong>`
+      )
+      .addTo(layerGroups.rates);
+    }
+
+    function buildCaptiveShare() {
+      clearLayer('captiveShare');
+      const center = STATE.geography === 'us' ? [37, -95] : [48, 8];
+      const data = DATA.captiveShare[STATE.geography][STATE.segment];
+      const html = data.map(([k,v]) => `<div class="row"><span>${k}</span><span><strong>${v}%</strong></span></div>`).join('');
+      L.circleMarker(center, {
+        radius: 18, color: '#7c3aed', weight: 2,
+        fillColor: '#7c3aed', fillOpacity: 0.12
+      })
+      .bindPopup(`<strong>Originations share — ${STATE.geography.toUpperCase()} · ${STATE.segment}</strong>${html}`)
+      .addTo(layerGroups.captiveShare);
+    }
+
+    function applyLayers() {
+      Object.keys(layerGroups).forEach(name => {
+        const on = STATE.layers[name];
+        if (on && !map.hasLayer(layerGroups[name])) map.addLayer(layerGroups[name]);
+        if (!on && map.hasLayer(layerGroups[name])) map.removeLayer(layerGroups[name]);
+      });
+    }
+
+    function rebuildAllLayers() {
+      buildRegistrations();
+      buildLeaders();
+      buildCaptiveShare();
+      buildRates();
+      buildReg();
+      buildSupply();
+      buildEv();
+      applyLayers();
+    }
+
+    // ============================================================
+    // SIDE PANEL / CARDS RENDER
+    // ============================================================
+    function renderKpis() {
+      const k = DATA.kpis[STATE.geography][STATE.segment];
+      const grid = document.getElementById('kpiGrid');
+      const sourceLine = STATE.geography === 'us'
+        ? (STATE.segment === 'commercial' ? 'FRED + ELFA MLFI-25 + Cox' : 'FRED + Cox + NY Fed HHDC')
+        : (STATE.segment === 'commercial' ? 'ECB SDW + Leaseurope + ACEA' : 'ECB SDW + Eurofinas + ACEA');
+      const dir = (s) => s.startsWith('+') ? 'up' : (s.startsWith('−') || s.startsWith('-')) ? 'down' : '';
+      grid.innerHTML = `
+        <div class="kpi"><div class="lbl">Avg new financing rate</div>
+          <div class="val">${k.rate}</div>
+          <div class="delta ${dir(k.rateD)}">${k.rateD}</div>
+          <div class="src">${sourceLine}</div></div>
+        <div class="kpi"><div class="lbl">Originations · YoY</div>
+          <div class="val">${k.orig}</div>
+          <div class="delta ${dir(k.orig)}">${STATE.segment === 'commercial' ? 'commercial book' : 'retail volume'}</div>
+          <div class="src">${sourceLine}</div></div>
+        <div class="kpi"><div class="lbl">Delinquency / risk</div>
+          <div class="val">${k.delinq}</div>
+          <div class="delta ${dir(k.delinqD)}">${k.delinqD}</div>
+          <div class="src">${STATE.segment === 'commercial' ? 'Net charge-offs (proxy)' : '60+ day delinquency'}</div></div>
+        <div class="kpi"><div class="lbl">Used vehicle value</div>
+          <div class="val">${k.mvpi}</div>
+          <div class="delta">Manheim index</div>
+          <div class="src">${k.mvpi === 'n/a' ? 'No single EU index — Indicata as proxy' : 'Cox monthly · free'}</div></div>
+      `;
+    }
+
+    function renderTcoCard() {
+      const fsLabel = STATE.fleetSize === 'all' ? 'All fleet sizes' :
+        ({micro:'Micro 1-5', small:'Small 6-50', medium:'Medium 51-200', large:'Large 201-600', xl:'XL 601+'}[STATE.fleetSize]);
+      document.querySelector('#tcoCard h2 .badge').textContent = fsLabel;
+      const rows = FMC_LIST().map(([key, p]) => {
+        const scoreLabel = p.tcoScore === 'h' ? 'High' : p.tcoScore === 'm' ? 'Med' : 'Low';
+        const scoreClass = p.tcoScore === 'h' ? 'score-h' : p.tcoScore === 'm' ? 'score-m' : 'score-l';
+        const dim = p.region !== STATE.geography ? 'dim' : '';
+        return `
+          <div class="tco-row ${dim}" data-fmc="${key}">
+            <div>
+              <div class="name">${p.name}</div>
+              <div class="desc">${p.tco}</div>
+            </div>
+            <div class="score ${scoreClass}">${scoreLabel}</div>
+          </div>`;
+      }).join('');
+      document.getElementById('tcoRows').innerHTML = rows;
+    }
+
+    function renderCoverageMatrix() {
+      const items = FMC_FOR_REGION(STATE.geography);
+      document.getElementById('coverageBadge').textContent = STATE.geography === 'us' ? 'U.S. providers' : 'European providers';
+      const sizes = ['micro','small','medium','large','xl'];
+      const sizeLabels = ['Micro', 'Small', 'Medium', 'Large', 'XL'];
+      let html = '';
+      html += `<div class="head firstcol">Provider</div>` +
+              sizeLabels.map(s => `<div class="head">${s}</div>`).join('');
+      items.forEach(([key, p]) => {
+        html += `<div class="prov" data-fmc="${key}">${p.name}</div>`;
+        sizes.forEach(s => {
+          const lvl = p.sizeMix[s] || 0;
+          // highlight when fleetSize filter matches
+          const isFocused = STATE.fleetSize !== 'all' && STATE.fleetSize === s;
+          const focusStyle = isFocused ? ' style="background:rgba(15,76,129,0.06); border-radius:4px;"' : '';
+          html += `<div class="cell"${focusStyle}><span class="matrix-dot l${lvl}"></span></div>`;
+        });
+      });
+      document.getElementById('coverageMatrix').innerHTML = html;
+    }
+
+    function renderCaptiveBars() {
+      const data = DATA.captiveShare[STATE.geography][STATE.segment];
+      const max = Math.max(...data.map(([,v]) => v));
+      const html = data.map(([k,v]) => `
+        <div class="bar">
+          <span class="name">${k}</span>
+          <span class="track"><span class="fill" style="width:${(v/max)*100}%"></span></span>
+          <span class="val">${v}%</span>
+        </div>`).join('');
+      document.getElementById('captiveBars').innerHTML = html;
+      document.getElementById('captiveBadge').textContent =
+        `${STATE.geography === 'us' ? 'U.S.' : 'EU'} — ${STATE.segment === 'commercial' ? 'Commercial' : 'Consumer'}`;
+    }
+
+    function renderManheim() {
+      const data = DATA.manheim;
+      const w = 320, h = 44, pad = 3;
+      const min = Math.min(...data), max = Math.max(...data);
+      const xStep = (w - pad*2) / (data.length - 1);
+      const points = data.map((v, i) => {
+        const x = pad + i * xStep;
+        const y = pad + (h - pad*2) * (1 - (v - min) / (max - min));
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      const last = data[data.length - 1];
+      const yoy = ((last - data[data.length - 13]) / data[data.length - 13] * 100).toFixed(1);
+      document.getElementById('manheimSpark').innerHTML = `
+        <svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+          <polyline points="${points}" fill="none" stroke="#0f4c81" stroke-width="1.8"/>
+          <circle cx="${pad + (data.length-1)*xStep}" cy="${pad + (h - pad*2) * (1 - (last - min) / (max - min))}" r="3.5" fill="#0f4c81"/>
+        </svg>
+      `;
+      document.getElementById('manheimVal').textContent = last.toFixed(1);
+      document.getElementById('manheimDelta').textContent = `${yoy >= 0 ? '+' : ''}${yoy}% YoY`;
+    }
+
+    function renderMacro() {
+      const m = DATA.macro[STATE.geography];
+      document.getElementById('macroBadge').textContent = STATE.geography === 'us' ? 'FRED + NY Fed' : 'ECB SDW';
+      document.getElementById('macroRate').innerHTML = `<strong>${m.policy}</strong> <span class="meta">${m.policySrc}</span>`;
+      document.getElementById('macroApr').innerHTML = `<strong>${m.apr}</strong> <span class="meta">${STATE.geography === 'us' ? '60mo new (FRED)' : 'EU consumer credit (ECB SDW)'}</span>`;
+      document.getElementById('macroDelinq').innerHTML = `<strong>${m.delinq}</strong> <span class="meta">${STATE.geography === 'us' ? 'NY Fed HHDC' : 'ECB risk dashboard'}</span>`;
+    }
+
+    function renderReg() {
+      const items = DATA.regulatory[STATE.geography];
+      document.getElementById('regBadge').textContent = STATE.geography === 'us' ? 'U.S.' : 'EU';
+      document.getElementById('regRows').innerHTML = items.map(r => `
+        <div class="row">
+          <div>
+            <div class="name">${r.title}</div>
+            <div class="meta">${r.meta}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderCeo() {
+      const key = `${STATE.geography}-${STATE.segment}`;
+      const takes = DATA.ceoTakes[key] || [];
+      const html = takes.map((t, i) => `
+        <div class="row" style="align-items:flex-start;">
+          <div style="flex:1; padding-right:8px;">
+            <div class="name" style="margin-bottom:3px;">${i+1}. ${t.hd}</div>
+            <div class="meta" style="font-style:italic;">${t.ln}</div>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('ceoTakes').innerHTML = html;
+    }
+
+    function renderAll() {
+      renderKpis();
+      renderTcoCard();
+      renderCoverageMatrix();
+      renderCaptiveBars();
+      renderManheim();
+      renderMacro();
+      renderReg();
+      renderCeo();
+    }
+
+    // ============================================================
+    // FMC PROFILE DRAWER
+    // ============================================================
+    const drawer = document.getElementById('fmcDrawer');
+    const backdrop = document.getElementById('drawerBackdrop');
+    const drawerCloseBtn = document.getElementById('drawerClose');
+
+    function openDrawer(key) {
+      const p = FMC_PROFILES[key];
+      if (!p) return;
+      document.getElementById('drawerTitle').textContent = p.name;
+      document.getElementById('drawerRegion').textContent = p.region === 'us' ? 'North America' : 'Europe';
+      document.getElementById('drawerParent').textContent = `${p.parent} · HQ: ${p.hq}`;
+
+      const sizeBars = ['micro','small','medium','large','xl'].map(s => {
+        const lvl = p.sizeMix[s] || 0;
+        const lbl = ({micro:'Micro',small:'Small',medium:'Medium',large:'Large',xl:'XL'})[s];
+        const desc = lvl === 0 ? 'None' : lvl === 1 ? 'Limited' : lvl === 2 ? 'Secondary' : 'Primary';
+        const w = lvl * 33;
+        return `
+          <div class="size-mix">
+            <span class="name">${lbl}</span>
+            <span class="track"><span class="fill" style="width:${w}%"></span></span>
+            <span class="val">${desc}</span>
+          </div>`;
+      }).join('');
+
+      const verticals = p.verticals.map(v => `<span class="vert-pill">${v}</span>`).join('');
+
+      document.getElementById('drawerBody').innerHTML = `
+        <div class="drawer-section">
+          <div class="quickstats">
+            <div class="quickstat"><div class="qlbl">Vehicles UM</div><div class="qval">${p.vum}</div></div>
+            <div class="quickstat"><div class="qlbl">Countries</div><div class="qval">${p.countries}</div></div>
+          </div>
+        </div>
+        <div class="drawer-section">
+          <h4>Where they play (fleet size)</h4>
+          ${sizeBars}
+        </div>
+        <div class="drawer-section">
+          <h4>Customer verticals</h4>
+          <div class="verticals">${verticals}</div>
+        </div>
+        <div class="drawer-section">
+          <h4>Differentiator</h4>
+          <p>${p.diff}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>TCO posture</h4>
+          <p>${p.tco}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>EV in their book</h4>
+          <p>${p.ev}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>OEM partnerships</h4>
+          <p>${p.oem}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>Recent moves</h4>
+          <p>${p.recent}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>Notable customers</h4>
+          <p>${p.customers}</p>
+        </div>
+        <div class="drawer-section">
+          <h4>Source</h4>
+          <p class="src-link"><a href="https://${p.sourceUrl}" target="_blank" rel="noopener">${p.sourceUrl}</a></p>
+        </div>
+      `;
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+      drawer.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+      drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    backdrop.addEventListener('click', closeDrawer);
+    drawerCloseBtn.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+    // Delegated click for TCO rows and matrix provider names
+    document.body.addEventListener('click', (e) => {
+      const tcoRow = e.target.closest('.tco-row[data-fmc]');
+      if (tcoRow) { openDrawer(tcoRow.dataset.fmc); return; }
+      const prov = e.target.closest('.matrix .prov[data-fmc]');
+      if (prov) { openDrawer(prov.dataset.fmc); return; }
+    });
+
+    // ============================================================
+    // TOGGLE / LAYER WIRING
+    // ============================================================
+    document.querySelectorAll('.toggle-group').forEach(group => {
+      group.addEventListener('click', e => {
+        const btn = e.target.closest('.pill');
+        if (!btn || btn.disabled) return;
+        const groupName = group.dataset.group;
+        const val = btn.dataset.val;
+        if (groupName === 'geo') STATE.geography = val;
+        if (groupName === 'seg') STATE.segment = val;
+        if (groupName === 'size') STATE.fleetSize = val;
+        if (groupName === 'view') {
+          STATE.view = val;
+          document.body.classList.toggle('view-cards', val === 'cards');
+          document.body.classList.toggle('view-map', val === 'map');
+          if (val === 'map') setTimeout(() => map.invalidateSize(), 80);
+        }
+        group.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        updateFleetSizeAvailability();
+        rebuildAllLayers();
+        renderAll();
+        if (groupName === 'geo' && STATE.view === 'map') {
+          const v = STATE.geography === 'us' ? [39, -96] : [50, 10];
+          map.flyTo(v, 4, { duration: 0.7 });
+        }
+      });
+    });
+
+    function updateFleetSizeAvailability() {
+      const grp = document.querySelector('[data-group="size"]');
+      const consumer = STATE.segment === 'consumer';
+      grp.querySelectorAll('.pill').forEach(p => {
+        if (consumer) {
+          p.disabled = (p.dataset.val !== 'all');
+          if (p.dataset.val !== 'all' && p.classList.contains('active')) {
+            p.classList.remove('active');
+            grp.querySelector('[data-val="all"]').classList.add('active');
+            STATE.fleetSize = 'all';
+          }
+        } else {
+          p.disabled = false;
+        }
+      });
+    }
+
+    document.querySelectorAll('#layerPanel input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', e => {
+        STATE.layers[e.target.dataset.layer] = e.target.checked;
+        applyLayers();
+      });
+    });
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    rebuildAllLayers();
+    renderAll();
+    updateFleetSizeAvailability();
+    // map sizes correctly once user switches to map view
+    setTimeout(() => map.invalidateSize(), 200);
+    window.addEventListener('resize', () => map.invalidateSize());
+  </script>
+</body>
+</html>
